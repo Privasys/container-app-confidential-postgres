@@ -1,0 +1,53 @@
+# Copyright (c) Privasys. All rights reserved.
+# Licensed under the GNU Affero General Public License v3.0.
+#
+# CI build-contract gate for the confidential user-data store. The platform
+# builds this image reproducibly from the Git commit at deploy time; this
+# workflow just verifies the container contract so a broken image never ships:
+# it MUST listen on the injected $PORT and serve /health (with Postgres coming
+# up on a fresh /data volume).
+
+name: Build contract — confidential-postgres
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: docker build -t userstore-smoke .
+
+      - name: Must listen on injected $PORT and serve /health
+        run: |
+          set -euo pipefail
+          PORT=18080
+          docker volume create userstore-smoke-data >/dev/null
+          docker run -d --name userstore-smoke \
+            -e PORT=$PORT -p $PORT:$PORT \
+            -v userstore-smoke-data:/data userstore-smoke
+          ok=0
+          for _ in $(seq 1 40); do
+            if curl -fs "http://localhost:$PORT/health" | grep -q '"healthy"'; then ok=1; break; fi
+            sleep 1
+          done
+          echo "--- container logs ---"; docker logs userstore-smoke || true
+          if [ "$ok" = "1" ]; then
+            # Round-trip a record through the in-enclave Postgres.
+            curl -fs "http://localhost:$PORT/create_user" -d '{"name":"Ada","email":"ada@example.com"}'
+            curl -fs "http://localhost:$PORT/list_users" -d '{}' | grep -q "ada@example.com" || ok=0
+          fi
+          docker rm -f userstore-smoke >/dev/null 2>&1 || true
+          docker volume rm userstore-smoke-data >/dev/null 2>&1 || true
+          if [ "$ok" != "1" ]; then
+            echo "::error::Image did not serve /health on injected PORT=$PORT or failed the user round-trip. The app MUST listen on \$PORT and persist to /data."
+            exit 1
+          fi
+          echo "✓ listens on \$PORT, serves /health, and round-trips a user through Postgres on /data"

@@ -1,0 +1,47 @@
+{
+    "tools": [
+        {
+            "name": "create_user",
+            "description": "Create a user record in the confidential database. The record is stored in PostgreSQL on the per-app sealed /data volume — encrypted at rest under a key only the app owner controls; the host, the operator, and Privasys never see the plaintext.",
+            "endpoint": "/create_user",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The user's name."
+                    },
+                    "email": {
+                        "type": "string",
+                        "description": "The user's email address."
+                    }
+                },
+                "required": ["name", "email"]
+            }
+        },
+        {
+            "name": "get_user",
+            "description": "Fetch a single user record by id from the confidential database.",
+            "endpoint": "/get_user",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "description": "The user id returned by create_user."
+                    }
+                },
+                "required": ["id"]
+            }
+        },
+        {
+            "name": "list_users",
+            "description": "List all user records in the confidential database.",
+            "endpoint": "/list_users",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            }
+        }
+    ]
+}
